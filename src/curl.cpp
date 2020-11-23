@@ -514,7 +514,7 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
     }
 
     // neither the last extension nor the second-to-last extension
-    // matched a mimeType, return the default mime type 
+    // matched a mimeType, return the default mime type
     return result;
 }
 
@@ -882,7 +882,7 @@ bool S3fsCurl::SetSseKmsid(const char* kmsid)
 }
 
 // [NOTE]
-// Because SSE is set by some options and environment, 
+// Because SSE is set by some options and environment,
 // this function check the integrity of the SSE data finally.
 bool S3fsCurl::FinalCheckSse()
 {
@@ -915,7 +915,7 @@ bool S3fsCurl::FinalCheckSse()
 
     return false;
 }
-                                                                                                                                                   
+
 bool S3fsCurl::LoadEnvSseCKeys()
 {
     char* envkeys = getenv("AWSSSECKEYS");
@@ -1729,7 +1729,7 @@ bool S3fsCurl::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
     }
     // [NOTE]
     // expected following strings.
-    // 
+    //
     // myrolename
     //
     std::istringstream ssrole(response);
@@ -1851,7 +1851,7 @@ int S3fsCurl::RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
-S3fsCurl::S3fsCurl(bool ahbe) : 
+S3fsCurl::S3fsCurl(bool ahbe) :
     hCurl(NULL), type(REQTYPE_UNSET), requestHeaders(NULL),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
@@ -1971,7 +1971,7 @@ bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data)
 
     if(hCurl){
         AutoLock lock(&S3fsCurl::curl_handles_lock);
-  
+
         S3fsCurl::curl_times.erase(hCurl);
         S3fsCurl::curl_progress.erase(hCurl);
         sCurlPool->ReturnHandler(hCurl, restore_pool);
@@ -2313,27 +2313,27 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
             case CURLE_WRITE_ERROR:
                 S3FS_PRN_ERR("### CURLE_WRITE_ERROR");
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_OPERATION_TIMEDOUT:
                 S3FS_PRN_ERR("### CURLE_OPERATION_TIMEDOUT");
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_COULDNT_RESOLVE_HOST:
                 S3FS_PRN_ERR("### CURLE_COULDNT_RESOLVE_HOST");
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_COULDNT_CONNECT:
                 S3FS_PRN_ERR("### CURLE_COULDNT_CONNECT");
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_GOT_NOTHING:
                 S3FS_PRN_ERR("### CURLE_GOT_NOTHING");
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_ABORTED_BY_CALLBACK:
                 S3FS_PRN_ERR("### CURLE_ABORTED_BY_CALLBACK");
@@ -2342,12 +2342,12 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                     AutoLock lock(&S3fsCurl::curl_handles_lock);
                     S3fsCurl::curl_times[hCurl] = time(0);
                 }
-                break; 
+                break;
 
             case CURLE_PARTIAL_FILE:
                 S3FS_PRN_ERR("### CURLE_PARTIAL_FILE");
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_SEND_ERROR:
                 S3FS_PRN_ERR("### CURLE_SEND_ERROR");
@@ -2408,7 +2408,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 }else{
                     S3FS_PRN_INFO3("HTTP response code =%ld", responseCode);
 
-                    // Let's try to retrieve the 
+                    // Let's try to retrieve the
                     if(404 == responseCode){
                         result = -ENOENT;
                     }else if(500 > responseCode){
@@ -2714,7 +2714,7 @@ int S3fsCurl::GetIAMv2ApiToken()
     int result = RequestPerform(true);
 
     if(0 == result && !S3fsCurl::SetIAMv2APIToken(bodydata.str())){
-        S3FS_PRN_ERR("Error storing IMDSv2 API token.");
+        S3FS_PRN_CRIT("Error storing IMDSv2 API token.");
         result = -EIO;
     }
     bodydata.Clear();
@@ -2770,7 +2770,7 @@ int S3fsCurl::GetIAMCredentials()
                 S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
             }
         }
-        
+
         url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
     }
 
@@ -2836,11 +2836,33 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
         return false;
     }
 
+    if(S3fsCurl::IAM_api_version > 1){
+        int result = GetIAMv2ApiToken();
+        if(-ENOENT == result){
+            // If we get a 404 back when requesting the token service,
+            // then it's highly likely we're running in an environment
+            // that doesn't support the AWS IMDSv2 API, so we'll skip
+            // the token retrieval in the future.
+            SetIMDSVersion(1);
+        }else if(result != 0){
+            // If we get an unexpected error when retrieving the API
+            // token, log it but continue.  Requirement for including
+            // an API token with the metadata request may or may not
+            // be required, so we should not abort here.
+            S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
+        }
+    }
+
     // url
     url             = std::string(S3fsCurl::IAM_cred_url);
+
     requestHeaders  = NULL;
     responseHeaders.clear();
     bodydata.Clear();
+
+    if(S3fsCurl::IAM_api_version > 1){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_hdr.c_str(), S3fsCurl::IAMv2_api_token.c_str());
+    }
 
     curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
@@ -3788,9 +3810,9 @@ bool S3fsCurl::UploadMultipartPostComplete()
 
     // check etag(md5);
     //
-    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent  
+    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent
     // SSE_C: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
-    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:  
+    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:
     // https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
     //
     if(S3fsCurl::is_content_md5 && sse_type_t::SSE_C != S3fsCurl::GetSseType() && sse_type_t::SSE_KMS != S3fsCurl::GetSseType()){
