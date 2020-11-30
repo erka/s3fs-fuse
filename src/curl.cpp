@@ -2705,7 +2705,7 @@ int S3fsCurl::GetIAMv2ApiToken()
     snprintf(ttlstr, sizeof(ttlstr), "%d", S3fsCurl::IAMv2_token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_ttl_hdr.c_str(),
                                             ttlstr);
-    curl_easy_setopt(hCurl, CURLOPT_PUT, true);
+    curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
     curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -2718,7 +2718,6 @@ int S3fsCurl::GetIAMv2ApiToken()
         result = -EIO;
     }
     bodydata.Clear();
-    curl_easy_setopt(hCurl, CURLOPT_PUT, false);
 
     return result;
 }
@@ -2772,6 +2771,10 @@ int S3fsCurl::GetIAMCredentials()
         }
 
         url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
+    }
+
+    if(!CreateCurlHandle()){
+        return -EIO;
     }
 
     requestHeaders  = NULL;
@@ -2852,7 +2855,9 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
             S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
         }
     }
-
+    if(!CreateCurlHandle()){
+        return -EIO;
+    }
     // url
     url             = std::string(S3fsCurl::IAM_cred_url);
 
